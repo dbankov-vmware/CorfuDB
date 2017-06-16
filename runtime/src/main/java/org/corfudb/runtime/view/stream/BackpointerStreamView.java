@@ -364,10 +364,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // should be reflected. For each address which is less than
         // maxGlobalAddress, we insert it into the read queue.
 
-        followBackpointers(context.id, context.readQueue,
-                latestTokenValue,
-                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
-                d -> BackpointerOp.INCLUDE);
+        try {
+            followBackpointers(context.id, context.readQueue,
+                    latestTokenValue,
+                    Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                    d -> BackpointerOp.INCLUDE);
+        } catch (TrimmedException e) {
+            log.error("trimmed");
+            followBackpointers(context.id, context.readQueue,
+                    latestTokenValue,
+                    100,
+                    d -> BackpointerOp.INCLUDE);
+        }
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
     }

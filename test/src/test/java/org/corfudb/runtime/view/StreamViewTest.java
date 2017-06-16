@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -9,6 +10,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -281,7 +283,6 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(sv.next())
                 .isEqualTo(null);
     }
-
 
     @Test
     @SuppressWarnings("unchecked")
