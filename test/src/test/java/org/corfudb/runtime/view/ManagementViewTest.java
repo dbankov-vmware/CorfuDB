@@ -635,7 +635,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * <p>
      * Index  :  0  1  2  3  |          | 4  5  6  7  8
      * Stream :  A  B  A  B  | failover | A  C  A  B  B
-     * B.P    : -1 -1  0  1  |          | X  X  4  X  7
+     * B.P    : -1 -1  0  1  |          | 2  X  4  3  7
      * <p>
      * -1 : New StreamID so empty backpointers
      *  X : (null) Unknown backpointers as this is a failed-over sequencer.
@@ -650,8 +650,11 @@ public class ManagementViewTest extends AbstractViewTest {
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
         UUID streamC = UUID.nameUUIDFromBytes("stream C".getBytes());
 
-        final long streamA_backpointer = 4L;
-        final long streamB_backpointer = 7L;
+        final long streamA_backpointerRecovered = 2L;
+        final long streamB_backpointerRecovered = 3L;
+
+        final long streamA_backpointerFinal = 4L;
+        final long streamB_backpointerFinal = 7L;
 
         getTokenWriteAndAssertBackPointer(streamA, Address.NON_EXIST);
         getTokenWriteAndAssertBackPointer(streamB, Address.NON_EXIST);
@@ -660,11 +663,11 @@ public class ManagementViewTest extends AbstractViewTest {
 
         induceSequencerFailureAndWait();
 
-        getTokenWriteAndAssertBackPointer(streamA, Address.NO_BACKPOINTER);
-        getTokenWriteAndAssertBackPointer(streamC, Address.NO_BACKPOINTER);
-        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointer);
-        getTokenWriteAndAssertBackPointer(streamB, Address.NO_BACKPOINTER);
-        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointer);
+        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointerRecovered);
+        getTokenWriteAndAssertBackPointer(streamC, Address.NON_EXIST);
+        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointerFinal);
+        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointerRecovered);
+        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointerFinal);
     }
 
     /**

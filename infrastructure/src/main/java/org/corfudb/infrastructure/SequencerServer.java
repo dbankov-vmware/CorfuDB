@@ -24,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -139,12 +140,6 @@ public class SequencerServer extends AbstractServer {
             })
             .recordStats()
             .build();
-
-    /**
-     * flag indicating whether this sequencer is the bootstrap
-     * sequencer for the log, or not.
-     */
-    private boolean isFailoverSequencer = false;
 
     /**
      * Handler for this server.
@@ -294,10 +289,6 @@ public class SequencerServer extends AbstractServer {
 
             if (streamTailToGlobalTailMap.get(streamId) != null) {
                 maxStreamGlobalTail = streamTailToGlobalTailMap.get(streamId);
-            } else if (isFailoverSequencer) {
-                // if we don't have informatin about this stream tail because of fail-over,
-                // return the global tail of the log
-                maxStreamGlobalTail = globalLogTail.get() - 1L;
             }
         }
 
@@ -314,10 +305,11 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming request to reset the sequencer.
      */
     @ServerHandler(type = CorfuMsgType.RESET_SEQUENCER, opTimer = metricsPrefix + "reset")
-    public synchronized void resetServer(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx,
-                                         IServerRouter r,
+    public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
+                                         ChannelHandlerContext ctx, IServerRouter r,
                                          boolean isMetricsEnabled) {
-        long initialToken = msg.getPayload();
+        long initialToken = msg.getPayload().getGlobalTail();
+        final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
 
         //
         // if the sequencer is reset, then we can't know when was
@@ -333,14 +325,18 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         //
         if (initialToken > globalLogTail.get()) {
-            isFailoverSequencer = true;
             globalLogTail.set(initialToken);
             globalLogStart.set(initialToken);
             maxConflictWildcard = initialToken - 1;
             conflictToGlobalTailCache.invalidateAll();
+
+            // Clear the existing map as it could have been populated by an earlier reset.
+            streamTailToGlobalTailMap.clear();
+            streamTailToGlobalTailMap.putAll(streamTails);
         }
 
-        log.info("Sequencer reset with token = {}", initialToken);
+        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {}",
+                initialToken, streamTailToGlobalTailMap);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -470,11 +466,7 @@ public class SequencerServer extends AbstractServer {
             // step 1. and 2. (comment above)
             streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
-                    if (!isFailoverSequencer) {
-                        backPointerMap.put(k, Address.NON_EXIST);
-                    } else {
-                        backPointerMap.put(k, Address.NO_BACKPOINTER);
-                    }
+                    backPointerMap.put(k, Address.NON_EXIST);
                     return newTail - 1;
                 } else {
                     backPointerMap.put(k, v);
